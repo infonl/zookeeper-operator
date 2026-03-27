@@ -87,7 +87,7 @@ var _ = BeforeSuite(func() {
 	if os.Getenv("RUN_LOCAL") == "true" {
 		k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: scheme.Scheme,
-			Cache:  cache.Options{Namespaces: []string{testNamespace}},
+			Cache:  cache.Options{DefaultNamespaces: map[string]cache.Config{testNamespace: {}}},
 		})
 		Expect(err).ToNot(HaveOccurred())
 

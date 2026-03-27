@@ -19,7 +19,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	clientscheme "k8s.io/client-go/kubernetes/scheme"
 	k8sClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -77,8 +76,8 @@ var _ = Describe("Leader election utils", func() {
 					},
 				}
 
-				client = fake.NewClientBuilder().WithScheme(clientscheme.Scheme).WithRuntimeObjects(
-					[]runtime.Object{currentPod, otherPod, lockConfigMap}...).Build()
+				client = fake.NewClientBuilder().WithScheme(clientscheme.Scheme).WithObjects(
+					currentPod, otherPod, lockConfigMap).Build()
 
 				err = precheckLeaderLock(ctx, client, configmapName, namespace)
 			})
@@ -102,7 +101,7 @@ var _ = Describe("Leader election utils", func() {
 						},
 					},
 				}
-				client = fake.NewClientBuilder().WithScheme(clientscheme.Scheme).WithRuntimeObjects([]runtime.Object{currentPod, otherPod, lockConfigMap}...).Build()
+				client = fake.NewClientBuilder().WithScheme(clientscheme.Scheme).WithObjects(currentPod, otherPod, lockConfigMap).WithStatusSubresource(otherPod).Build()
 				err = precheckLeaderLock(ctx, client, configmapName, namespace)
 			})
 
@@ -122,8 +121,8 @@ var _ = Describe("Leader election utils", func() {
 
 			Context("when that node is in ProviderFailed state", func() {
 				BeforeEach(func() {
-					otherPod.Status.Reason = "ProviderFailed"
-					_ = client.Update(ctx, otherPod)
+				otherPod.Status.Reason = "ProviderFailed"
+				_ = client.Status().Update(ctx, otherPod)
 
 					err = precheckLeaderLock(ctx, client, configmapName, namespace)
 				})
