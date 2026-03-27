@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	"github.com/pravega/zookeeper-operator/controllers"
@@ -116,10 +117,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	var defaultNamespaces map[string]cache.Config
+	if len(managerNamespaces) > 0 {
+		defaultNamespaces = make(map[string]cache.Config)
+		for _, ns := range managerNamespaces {
+			defaultNamespaces[ns] = cache.Config{}
+		}
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		Cache:              cache.Options{Namespaces: managerNamespaces},
-		MetricsBindAddress: metricsAddr,
+		Scheme:  scheme,
+		Cache:   cache.Options{DefaultNamespaces: defaultNamespaces},
+		Metrics: metricsserver.Options{BindAddress: metricsAddr},
 	})
 	if err != nil {
 		log.Error(err, "unable to start manager")
