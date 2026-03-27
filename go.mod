@@ -10,7 +10,7 @@ require (
 	github.com/operator-framework/operator-lib v0.11.0
 	github.com/pkg/errors v0.9.1
 	github.com/samuel/go-zookeeper v0.0.0-20201211165307-7117e9ea2414
-	github.com/sirupsen/logrus v1.9.0
+	github.com/sirupsen/logrus v1.9.1
 	golang.org/x/net v0.17.0
 	k8s.io/api v0.27.5
 	k8s.io/apimachinery v0.27.5
