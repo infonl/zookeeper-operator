@@ -23,7 +23,7 @@ GIT_SHA=$(shell git rev-parse --short HEAD)
 TEST_IMAGE=$(TEST_REPO)-testimages:$(VERSION)
 DOCKER_TEST_PASS=testzkop@123
 DOCKER_TEST_USER=testzkop
-.PHONY: all build check clean test
+.PHONY: all build check clean test zu-lock security-scan
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -137,6 +137,22 @@ build-zk-image:
 
 	docker build --build-arg VERSION=$(VERSION)  --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) -t $(APP_REPO):$(VERSION) ./docker
 	docker tag $(APP_REPO):$(VERSION) $(APP_REPO):latest
+
+# Regenerate the zu.jar dependency lock file (docker/zu/gradle.lockfile).
+# Run after changing anything in docker/zu/build.gradle.kts and commit the result.
+zu-lock:
+	docker run --rm -v "$(CURDIR)/docker/zu":/zu -w /zu eclipse-temurin:11-jdk \
+		./gradlew --no-daemon --write-locks :dependencies
+
+# Scan for HIGH/CRITICAL CVEs the same way CI does (needs trivy + docker locally).
+security-scan:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1 \
+		--ignorefile .trivyignore --skip-dirs vendor,test --skip-files docker/zk-deps/pom.xml .
+	docker build -t $(REPO):scan .
+	trivy image --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed --ignorefile .trivyignore $(REPO):scan
+	docker build -t $(APP_REPO):scan ./docker
+	trivy image --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed --ignorefile .trivyignore $(APP_REPO):scan
 
 build-zk-image-swarm:
 	docker build --build-arg VERSION=$(VERSION)-swarm  --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) \

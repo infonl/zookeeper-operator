@@ -51,8 +51,8 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | `global.imagePullSecrets` | Lists of secrets to use to pull zookeeper-operator image from a private registry | `[]` |
 | `hooks.backoffLimit` | backoffLimit for batch jobs | `10` |
 | `hooks.delete` | Create pre-delete hook which ensures that the operator cannot be deleted until the zookeeper cluster custom resources have been cleaned up | `true` |
-| `hooks.image.repository` | Image repository for batch jobs | `"lachlanevenson/k8s-kubectl"` |
-| `hooks.image.tag` | Image tag for batch jobs | `"v1.16.10"` |
+| `hooks.image.repository` | Image repository for batch jobs | `"alpine/kubectl"` |
+| `hooks.image.tag` | Image tag for batch jobs | `"1.34.2"` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
 | `image.repository` | Image repository | `pravega/zookeeper-operator` |
 | `image.tag` | Image tag | `0.2.15` |

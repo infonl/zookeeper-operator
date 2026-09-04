@@ -1,0 +1,33 @@
+# Trivy suppression list.
+#
+# Only add an entry here when the finding is BOTH:
+#   1. not fixable by us (no patched release we can consume), AND
+#   2. mitigated by a documented compensating control.
+#
+# Every entry MUST carry: reason, compensating control, and a review date.
+# Full rationale: SECURITY.md.
+
+# ---------------------------------------------------------------------------
+# Eclipse Jetty 9.4.58.v20250814 (bundled by the zookeeper:3.9.5-jre-17 base
+# image, used by ZooKeeper's AdminServer and Prometheus metrics provider).
+#
+# Not fixable:
+#   - Jetty 9.4.x is community-EOL; the fixes (9.4.60 / 9.4.63) are subscriber-
+#     only and not on Maven Central, so they cannot be swapped in.
+#   - Jetty 10 and 11 are also EOL - their last public releases (10.0.26 /
+#     11.0.26) carry the SAME two CVEs, so a 10/11 swap gains nothing.
+#   - Jetty 12 has public fixes but needs zookeeper-server + prometheus-metrics
+#     recompiled from source against jakarta.servlet (see SECURITY.md).
+#     Targeted upstream for the ZooKeeper 4.0 line.
+#
+# Compensating controls (see SECURITY.md):
+#   - adminServerService.external stays false (no LoadBalancer for :8080).
+#   - Optional NetworkPolicy (charts/zookeeper templates) restricts :8080 and
+#     :7000 to same-namespace / explicitly selected peers.
+#   - AdminServer is reachable in-cluster only; not exposed to untrusted nets.
+#
+# Review by: 2026-12-01 (re-check for a public 9.4.x fix or ZK 4.0 GA).
+CVE-2026-2332    # HIGH   jetty-http: request smuggling via chunked ext quoted-string
+CVE-2026-10050   # HIGH   jetty-security: Digest auth encoding-collision auth bypass
+CVE-2024-6763    # MEDIUM jetty-http: HttpURI ambiguous authority parsing
+CVE-2026-6790    # MEDIUM jetty-server: response splitting via crafted header value

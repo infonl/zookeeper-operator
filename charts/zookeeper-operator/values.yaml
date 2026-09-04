@@ -63,8 +63,11 @@ hooks:
 
   backoffLimit: 10
   image:
-    repository: lachlanevenson/k8s-kubectl
-    tag: v1.23.2
+    # alpine/kubectl: maintained, versioned, Alpine-based (the hook scripts are
+    # /bin/sh). NOT registry.k8s.io/kubectl - that image is distroless with no
+    # shell, which breaks the shell-based cleanup hooks.
+    repository: alpine/kubectl
+    tag: "1.34.2"
   ## Whether to create pre-delete hook which ensures that
   ## the operator cannot be deleted till the zookeeper cluster
   ## custom resources have been cleaned up

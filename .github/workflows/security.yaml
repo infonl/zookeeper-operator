@@ -1,0 +1,99 @@
+# Security scanning: fails the build on HIGH/CRITICAL vulnerabilities.
+# Findings that are genuinely not fixable / not exploitable are documented and
+# suppressed in .trivyignore (with justification + review date).
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  schedule:
+    # Re-scan weekly so newly disclosed CVEs against unchanged code surface.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+env:
+  TRIVY_VERSION: "v0.73.0"
+
+jobs:
+  govulncheck:
+    name: govulncheck (operator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: govulncheck ./...
+
+  trivy-fs:
+    name: Trivy (repo dependencies + IaC)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin "${TRIVY_VERSION}"
+      - name: Scan dependencies
+        # docker/zk-deps/pom.xml is skipped here (unpinned pom => Trivy does live
+        # Maven Central resolution, which rate-limits in CI). Those jars are
+        # scanned for real in the trivy-image-zookeeper job.
+        run: |
+          trivy fs \
+            --scanners vuln,misconfig,secret \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --ignorefile .trivyignore \
+            --skip-dirs vendor,test \
+            --skip-files docker/zk-deps/pom.xml \
+            .
+
+  trivy-image-operator:
+    name: Trivy (operator image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin "${TRIVY_VERSION}"
+      - name: Build operator image
+        run: docker build -t zookeeper-operator:scan .
+      - name: Scan operator image
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --ignorefile .trivyignore \
+            zookeeper-operator:scan
+
+  trivy-image-zookeeper:
+    name: Trivy (zookeeper image)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Trivy
+        run: |
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin "${TRIVY_VERSION}"
+      - name: Build zookeeper image
+        run: docker build -t zookeeper:scan ./docker
+      - name: Scan zookeeper image
+        run: |
+          trivy image \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --ignore-unfixed \
+            --ignorefile .trivyignore \
+            zookeeper:scan
