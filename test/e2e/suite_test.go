@@ -37,8 +37,8 @@ import (
 )
 
 var (
-	cfg           *rest.Config
-	k8sClient     client.Client // You'll be using this client in your tests.
+	cfg       *rest.Config
+	k8sClient client.Client // You'll be using this client in your tests.
 	// Plain clientset alongside k8sClient - controller-runtime's client.Client
 	// has no logs API, and dumpPodLogs below needs one to catch a container
 	// crashing on this specific runner (see AfterEach) before AfterEach's own
