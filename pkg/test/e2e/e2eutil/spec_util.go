@@ -27,24 +27,42 @@ func NewDefaultCluster(namespace string) *api.ZookeeperCluster {
 			Name:      "zookeeper",
 			Namespace: namespace,
 		},
-		Spec: api.ZookeeperClusterSpec{},
+		Spec: api.ZookeeperClusterSpec{
+			// Pinned explicitly, NOT left to WithDefaults()'s own
+			// DefaultZkContainerRepository/Version fallback: that default now
+			// points at ghcr.io/infonl/zookeeper, this fork's own CVE-remediated
+			// image, which doesn't exist yet - it's only published once a real
+			// release actually runs the new `make push` GHCR pipeline (see
+			// .github/workflows/ci.yaml's publish job). Every spec that doesn't
+			// override Spec.Image (5 of 8 - upgrade_test.go, multiple_zk_test.go
+			// and image_pullsecret_test.go already set their own explicitly)
+			// goes through this constructor, so pointing it at a not-yet-published
+			// image would ImagePullBackOff the whole suite. Remove this override
+			// once ghcr.io/infonl/zookeeper:0.2.15-cve.1 is real and the E2E suite
+			// should start exercising the actual product default too.
+			Image: api.ContainerImage{
+				Repository: "pravega/zookeeper",
+				Tag:        "0.2.15",
+			},
+		},
 	}
 }
 
 func NewClusterWithVersion(namespace, version string) *api.ZookeeperCluster {
 	cluster := NewDefaultCluster(namespace)
-	cluster.Spec = api.ZookeeperClusterSpec{
-		Image: api.ContainerImage{
-			Tag: version,
-		},
-	}
+	// Overwrite only the tag - reusing NewDefaultCluster's own pinned Image
+	// (see its comment) rather than replacing the whole Spec, so this also
+	// stays off the not-yet-published DefaultZkContainerRepository default.
+	cluster.Spec.Image.Tag = version
 	return cluster
 }
 
 func NewClusterWithEmptyDir(namespace string) *api.ZookeeperCluster {
 	cluster := NewDefaultCluster(namespace)
-	cluster.Spec = api.ZookeeperClusterSpec{
-		StorageType: "ephemeral",
-	}
+	// Add StorageType without discarding NewDefaultCluster's pinned Image -
+	// a wholesale `cluster.Spec = ZookeeperClusterSpec{...}` here previously
+	// dropped it back to the WithDefaults() fallback, same reasoning as
+	// NewClusterWithVersion above.
+	cluster.Spec.StorageType = "ephemeral"
 	return cluster
 }

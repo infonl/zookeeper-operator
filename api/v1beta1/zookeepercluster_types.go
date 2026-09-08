@@ -21,12 +21,15 @@ import (
 
 const (
 	// DefaultZkContainerRepository is the default docker repo for the zookeeper
-	// container
-	DefaultZkContainerRepository = "pravega/zookeeper"
+	// container. This fork's own ghcr.io/infonl image (CVE-remediated,
+	// rebased onto the official zookeeper:3.9.5-jre-17 - see docker/Dockerfile)
+	// - not upstream pravega/zookeeper, which this fork has no credentials to
+	// publish to and which still carries the CVEs this fork exists to fix.
+	DefaultZkContainerRepository = "ghcr.io/infonl/zookeeper"
 
 	// DefaultZkContainerVersion is the default tag used for for the zookeeper
 	// container
-	DefaultZkContainerVersion = "0.2.15"
+	DefaultZkContainerVersion = "0.2.15-cve.1"
 
 	// DefaultZkContainerPolicy is the default container pull policy used
 	DefaultZkContainerPolicy = "Always"

@@ -8,8 +8,13 @@ global:
   # - private-registry-key
 
 image:
-  repository: pravega/zookeeper-operator
-  tag: 0.2.15
+  # This fork's own ghcr.io/infonl image (published by .github/workflows/
+  # ci.yaml's publish job via `make push`), not upstream pravega/
+  # zookeeper-operator - that project is unmaintained and this fork has no
+  # credentials to publish there anyway. See docker/Dockerfile and this
+  # branch's PR description for what CVE remediation this image carries.
+  repository: ghcr.io/infonl/zookeeper-operator
+  tag: 0.2.15-cve.1
   pullPolicy: IfNotPresent
 
 # Pod-level securityContext for the operator Deployment. Non-empty by
