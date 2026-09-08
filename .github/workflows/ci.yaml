@@ -149,11 +149,26 @@ jobs:
     runs-on: ubuntu-latest
     needs: [unit-tests, e2e]
     if: github.event_name == 'release' && github.event.action == 'created'
+    # packages:write is what lets the GITHUB_TOKEN below push to ghcr.io -
+    # no separate registry secret needed, this fork's own registry.
+    permissions:
+      contents: read
+      packages: write
     steps:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v7
+    - name: Log in to ghcr.io (Docker)
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
     - name: Pushing docker images
-      run: sudo make push
+      run: make push
+    - name: Set up Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: v3.15.4
+    - name: Log in to ghcr.io (Helm OCI)
+      run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+    - name: Package and publish Helm charts
+      run: make push-charts
     - name: Uploading binary files
       uses: actions/upload-artifact@v7
       with:
