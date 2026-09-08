@@ -31,3 +31,71 @@ CVE-2026-2332    # HIGH   jetty-http: request smuggling via chunked ext quoted-s
 CVE-2026-10050   # HIGH   jetty-security: Digest auth encoding-collision auth bypass
 CVE-2024-6763    # MEDIUM jetty-http: HttpURI ambiguous authority parsing
 CVE-2026-6790    # MEDIUM jetty-server: response splitting via crafted header value
+
+# ---------------------------------------------------------------------------
+# config/rbac/default_ns_rbac.yaml (Role, single-namespace mode) and
+# config/rbac/all_ns_rbac.yaml (ClusterRole, all-namespaces mode) — the
+# operator's own two RBAC manifests (exactly one is applied, depending on
+# whether WATCH_NAMESPACE is set - see main.go).
+#
+# Not fixable by narrowing without a real RBAC audit (out of scope for this
+# CVE-remediation PR - a wrong verb removed here breaks reconciliation, not
+# CI): every rule in both manifests uses `verbs: ["*"]` because kubebuilder/
+# controller-runtime's own generated-RBAC convention for an operator is
+# exactly this shape - full CRUD on the child resources (Pods/Services/
+# PVCs/ConfigMaps/Secrets/ServiceAccounts, Deployments/DaemonSets/
+# ReplicaSets/StatefulSets, PodDisruptionBudgets) it creates, updates and
+# deletes as part of every ZookeeperCluster reconcile, plus its own
+# `zookeeper.pravega.io` CRD group. None of these findings are new in this
+# PR - neither file is touched by it at all.
+#
+# Compensating controls:
+#   - default_ns_rbac.yaml is a Role, not a ClusterRole - scoped to the
+#     single namespace the operator's own ServiceAccount/RoleBinding live
+#     in. all_ns_rbac.yaml IS a ClusterRole (that's its whole purpose - the
+#     all-namespaces watch mode) - it inherently has no namespace boundary,
+#     which is what KSV-0041/-0046 (secrets access / "manage all resources")
+#     are really flagging; there is no narrower shape for "watch every
+#     namespace" than a ClusterRole.
+#   - `zookeeper.pravega.io` resources: ["*"] only reaches this operator's
+#     own CRD group (currently just ZookeeperCluster) - not a wildcard over
+#     unrelated resources.
+#   - KSV-0056 (services/endpoints/endpointslices/networkpolicies/ingresses
+#     create/update/patch/delete/impersonate) is a false positive from the
+#     verbs wildcard: the operator's own code (controllers/, pkg/) never
+#     calls impersonate, and never touches endpointslices/networkpolicies/
+#     ingresses at all - it only creates/updates the client/headless/admin
+#     Services each ZookeeperCluster needs.
+#   - secrets (KSV-0041) are read/written only for the ZK ensembles this
+#     operator itself creates (TLS/auth material it generates or is handed
+#     via the ZookeeperCluster spec) - not an unrelated-secrets grab.
+#
+# Follow-up: narrow verbs per-resource-type in a dedicated RBAC-hardening
+# PR (tested against a real reconcile, not just CI) rather than guessing
+# here. Review by: 2026-12-01 (same date as the Jetty entry above).
+KSV-0041   # CRITICAL ClusterRole manages 'secrets' (all_ns_rbac.yaml only)
+KSV-0045   # CRITICAL wildcard verb on specific resources (core + apps rule blocks, both files)
+KSV-0046   # CRITICAL ClusterRole wildcard resources on zookeeper.pravega.io (all_ns_rbac.yaml only)
+KSV-0056   # HIGH     broad verbs on services/endpoints/endpointslices/networkpolicies/ingresses (both files)
+KSV-0112   # CRITICAL Role wildcard resources on zookeeper.pravega.io (default_ns_rbac.yaml only)
+
+# ---------------------------------------------------------------------------
+# docker/Dockerfile — no USER instruction.
+#
+# Not fixable: intentional, matches the upstream zookeeper:3.9.5-jre-17
+# image's own convention. The image must start as root so its
+# /docker-entrypoint.sh can chown the mounted data/datalog/logs volumes
+# (which arrive as root-owned on a fresh PVC) before dropping privileges -
+# see the entrypoint's own `exec setpriv --reuid=zookeeper ...` swap (this
+# PR replaces upstream's `gosu` with `setpriv`, but the root-start-then-drop
+# shape is unchanged from upstream).
+#
+# Compensating control: the container never actually runs as root - the
+# entrypoint's final `exec setpriv --reuid=zookeeper --regid=zookeeper
+# --init-groups zkServer.sh ...` drops to uid/gid 1000 (zookeeper) before
+# the ZK process itself starts. `docker inspect`/`kubectl exec ... id`
+# confirms the running process, not the image's declared USER, actually
+# owns the pid.
+#
+# Review by: 2026-12-01.
+DS-0002    # HIGH runs as root at image build time; drops privileges at runtime via setpriv

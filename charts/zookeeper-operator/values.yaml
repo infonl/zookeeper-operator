@@ -12,9 +12,30 @@ image:
   tag: 0.2.15
   pullPolicy: IfNotPresent
 
-securityContext: {}
-#  runAsUser: 1001
-#  runAsGroup: 1001
+# Pod-level securityContext for the operator Deployment. Non-empty by
+# default (unlike hooks.securityContext below) so the chart ships hardened
+# out of the box - override individual keys rather than replacing the
+# block if you need to change one.
+securityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level securityContext for the operator container. Safe to lock
+# down fully: the manager binary this Deployment runs never writes to its
+# own filesystem at runtime (the one code path that does,
+# pkg/yamlexporter, is reachable only from the separate cmd/exporter CLI
+# binary, never from Reconcile()). runAsUser 65532 matches the image's own
+# base (distroless/static-debian12:nonroot) - pinned explicitly so the
+# intent is visible here rather than only inherited from the image.
+containerSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
 
 ## Additional labels to be added to resources
 labels: {}
