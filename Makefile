@@ -213,8 +213,27 @@ test-e2e-run:
 		kubectl logs -n default -l name=zookeeper-operator --tail=200 || true; \
 		exit 1; \
 	}
-	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v -ginkgo.focus="$(FOCUS)"
-	make undeploy
+	# Dump real cluster diagnostics on failure BEFORE undeploy tears
+	# everything down - a spec failing WaitForClusterToBecomeReady only
+	# ever reported "0/3 ready, pods ([])", with no visibility into *why*
+	# pods never appeared (ImagePullBackOff? FailedScheduling? a real
+	# CrashLoopBackOff?). Confirmed live that all of those are
+	# indistinguishable from the Ginkgo log alone, which cost real time
+	# chasing the wrong theory (cross-spec resource starvation, already
+	# fixed) when 6 of 8 *fully isolated* single-tenant shards failed with
+	# the exact same symptom in one run - something the sharding fix
+	# can't explain, so the next failure needs to say what actually
+	# happened instead of us guessing again.
+	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v -ginkgo.focus="$(FOCUS)"; e2e_status=$$?; \
+	if [ $$e2e_status -ne 0 ]; then \
+		echo "::group::E2E failed - cluster diagnostics before teardown"; \
+		kubectl get pods -n default -o wide; \
+		kubectl get events -n default --sort-by=.lastTimestamp | tail -100; \
+		for p in $$(kubectl get pods -n default -o name); do kubectl describe $$p -n default; done; \
+		echo "::endgroup::"; \
+	fi; \
+	make undeploy; \
+	exit $$e2e_status
 
 test-e2e-remote: test-e2e-build-image test-e2e-run
 
