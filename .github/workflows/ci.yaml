@@ -63,7 +63,17 @@ jobs:
   # test/e2e/suite_test.go), and runs all 8 in parallel instead of in
   # series.
   e2e:
-    runs-on: ubuntu-latest
+    # Pinned below ubuntu-latest (now 24.04) - confirmed live via the new
+    # dumpPodLogs diagnostics that zookeeper-0 crashes on 24.04 runners with
+    # `--vm-driver=none`, not from anything in this PR: the JVM inside the
+    # stock upstream pravega/zookeeper:0.2.15 image throws a
+    # NullPointerException in its JMX agent's cgroup v2 metrics reader
+    # (jdk.internal.platform.cgroupv2.CgroupV2Subsystem.getInstance) against
+    # 24.04's host cgroup layout, before ZooKeeper itself ever starts - a
+    # JDK/cgroup-v2 compatibility bug, not a scheduling/resource/image-pull
+    # issue. Never reproduced locally because macOS minikube runs its own VM
+    # with an entirely different cgroup setup. 22.04 doesn't trigger it.
+    runs-on: ubuntu-22.04
     needs: build-test-image
     # A hard ceiling so one slow/stuck shard fails loudly instead of running
     # for hours - the old single-job run sat for 1h41m before it was
