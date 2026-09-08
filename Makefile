@@ -163,10 +163,26 @@ test:
 
 test-e2e: test-e2e-remote
 
-test-e2e-remote:
+# FOCUS is a Ginkgo -focus regexp (matched against each spec's full
+# container+It description, e.g. the top-level `Describe("...")` text of one
+# test/e2e/*_test.go file). Left empty (the default), Ginkgo runs every spec -
+# this is what `make test-e2e` / `make test-e2e-remote` still do locally, and
+# what a single "run everything on one runner" CI job would set. CI instead
+# runs one matrix job per Describe block, each with its own FOCUS, its own
+# fresh minikube, and its own single-tenant ZookeeperCluster capacity - see
+# test-e2e-build-image below for why that split exists.
+FOCUS ?=
+
+# Split out of test-e2e-remote so CI can build+push the test image exactly
+# once and fan the (potentially many, resource-heavy) actual test run out
+# across several parallel single-purpose runners instead of one, without
+# rebuilding/pushing the same image once per runner.
+test-e2e-build-image:
 	make test-login
 	docker build . -t $(TEST_IMAGE)
 	docker push $(TEST_IMAGE)
+
+test-e2e-run:
 	make deploy
 	# Fail fast (~2 min) with real diagnostics if the operator pod itself
 	# never becomes Ready, instead of masquerading as the Ginkgo suite's own
@@ -184,8 +200,10 @@ test-e2e-remote:
 		kubectl logs -n default -l name=zookeeper-operator --tail=200 || true; \
 		exit 1; \
 	}
-	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v
+	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v -ginkgo.focus="$(FOCUS)"
 	make undeploy
+
+test-e2e-remote: test-e2e-build-image test-e2e-run
 
 test-e2e-local:
 	make deploy-test

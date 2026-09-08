@@ -15,7 +15,7 @@ on:
 
 # jobs to run
 jobs:
-  build:
+  unit-tests:
     runs-on: ubuntu-latest
     steps:
     - name: Check out code into the Go module directory
@@ -38,6 +38,65 @@ jobs:
       run: make test
     - name: Codecov
       uses: codecov/codecov-action@v7
+
+  # Builds and pushes the E2E test image exactly once, so the e2e matrix
+  # below doesn't rebuild/push the same image once per shard.
+  build-test-image:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v7
+    - name: Build and push E2E test image
+      run: make test-e2e-build-image
+
+  # One ZookeeperCluster E2E Describe block per job, each on its own fresh
+  # runner/minikube. Originally all 8 ran sequentially in a single job
+  # against one shared minikube - a spec left mid-teardown (a failure or
+  # ReadyTimeout skips its own cleanup) starved the *next* spec's brand-new
+  # multi-pod cluster of the same runner's already-tight 2 CPU/7GB capacity,
+  # observed live cascading into a run of specs in a row getting zero pods
+  # scheduled for their full 15-minute ReadyTimeout each. Giving every
+  # Describe block its own single-tenant runner removes that cross-spec
+  # contention entirely (each still needs its own AfterEach-vs-cleanup-race
+  # care for the multiple specs *within* one Describe block - see
+  # test/e2e/suite_test.go), and runs all 8 in parallel instead of in
+  # series.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: build-test-image
+    # A hard ceiling so one slow/stuck shard fails loudly instead of running
+    # for hours - the old single-job run sat for 1h41m before it was
+    # cancelled by hand with no sign it would ever finish. Each shard here
+    # is at most a couple of the old suite's 8 Describe blocks worth of
+    # ReadyTimeout/UpgradeTimeout budget, so 60m is generous headroom over
+    # what a healthy run needs while still catching a truly wedged runner.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        describe:
+          - "Basic test controller"
+          - "Ephemeral test controller"
+          - "Image pull secret check"
+          - "Operations with multiple cluster"
+          - "Delete pods in zk clusters"
+          - "Perform rolling restart on zk cluster"
+          - "Perform scale for cluster upgrade"
+          - "Perform zk cluster upgrade"
+    steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v7
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+        check-latest: true
+      id: go
+    - name: Set up Go for root
+      run: |
+        sudo ln -sf `which go` `sudo which go` || true
+        sudo go version
     - name: Set env
       run: |
         echo "KUBERNETES_VERSION=v1.23.1" >> $GITHUB_ENV
@@ -73,13 +132,16 @@ jobs:
         sudo kubectl -n kube-system get pod -o wide
         sudo kubectl create secret docker-registry regcred --docker-server=https://index.docker.io/v1/ --docker-username="testanisha"  --docker-password="123456789" --docker-email=testimage456@gmail.com
     - name: E2E
-      run: sudo make test-e2e
+      run: sudo env FOCUS="${{ matrix.describe }}" make test-e2e-run
+
   publish:
     name: Publish docker image
     runs-on: ubuntu-latest
-    needs: build
+    needs: [unit-tests, e2e]
     if: github.event_name == 'release' && github.event.action == 'created'
     steps:
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v7
     - name: Pushing docker images
       run: sudo make push
     - name: Uploading binary files
