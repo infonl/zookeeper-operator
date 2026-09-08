@@ -16,6 +16,7 @@ import (
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	zookeeperv1beta1 "github.com/pravega/zookeeper-operator/api/v1beta1"
 	zookeepercontroller "github.com/pravega/zookeeper-operator/controllers"
+	zk_e2eutil "github.com/pravega/zookeeper-operator/pkg/test/e2e/e2eutil"
 	zkClient "github.com/pravega/zookeeper-operator/pkg/zk"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -119,13 +120,24 @@ var _ = AfterSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 })
 
+// Catches whatever a failed/timed-out spec's own cleanup never got to run
+// (a spec that fails mid-test - e.g. a ReadyTimeout - never reaches its own
+// trailing WaitForClusterToTerminate call). Waiting for full termination
+// here, not just firing the Delete, matters specifically for that case: on
+// a resource-constrained single-node cluster, letting the NEXT spec start
+// creating a new multi-pod cluster while THIS one's pods/PVCs are still
+// mid-teardown starves it of the same capacity, which was observed live to
+// cascade into a run of several specs in a row never getting any pods
+// scheduled at all (repeated "pods ([])" for the full ReadyTimeout).
 var _ = AfterEach(func() {
 	zkList := &api.ZookeeperClusterList{}
 	listOptions := []client.ListOption{
 		client.InNamespace(testNamespace),
 	}
 	Expect(k8sClient.List(ctx, zkList, listOptions...)).NotTo(HaveOccurred())
-	for _, zk := range zkList.Items {
-		Expect(k8sClient.Delete(ctx, &zk)).NotTo(HaveOccurred())
+	for i := range zkList.Items {
+		zk := &zkList.Items[i]
+		Expect(k8sClient.Delete(ctx, zk)).NotTo(HaveOccurred())
+		Expect(zk_e2eutil.WaitForClusterToTerminate(logger, k8sClient, zk)).NotTo(HaveOccurred())
 	}
 })
