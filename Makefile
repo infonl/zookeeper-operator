@@ -90,7 +90,20 @@ KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/k
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || { curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN); }
+	# Retried: a bare single curl|bash here hit a transient SSL connect
+	# error (curl exit 35) in CI - the exact same install call succeeded in
+	# a sibling job 52s earlier/later, so it's the network blip, not the
+	# script or the pinned old release. Only bites more now that the E2E
+	# matrix runs this once per shard (8 concurrent installs) instead of
+	# once for the whole suite, so a few retries buys back that odds hit.
+	test -s $(LOCALBIN)/kustomize || { \
+		for i in 1 2 3 4 5; do \
+			curl -fsSL $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN) && break; \
+			echo "kustomize install attempt $$i failed, retrying in 5s..." >&2; \
+			sleep 5; \
+		done; \
+		test -s $(LOCALBIN)/kustomize; \
+	}
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
