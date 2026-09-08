@@ -168,6 +168,22 @@ test-e2e-remote:
 	docker build . -t $(TEST_IMAGE)
 	docker push $(TEST_IMAGE)
 	make deploy
+	# Fail fast (~2 min) with real diagnostics if the operator pod itself
+	# never becomes Ready, instead of masquerading as the Ginkgo suite's own
+	# 15-minute-per-spec ZookeeperCluster-readiness timeout (pkg/test/e2e/
+	# e2eutil.ReadyTimeout) with zero information about why - confirmed live
+	# that a ZookeeperCluster reconciles and gets pods in seconds once the
+	# operator pod is actually Running (see the CVE-remediation PR's own
+	# description for the local repro), so an operator pod that isn't Ready
+	# yet is the one thing this step exists to catch before wasting the
+	# Ginkgo suite's own budget on it.
+	kubectl rollout status deployment/zookeeper-operator -n default --timeout=120s || { \
+		echo "::error::zookeeper-operator did not become Ready within 120s - dumping diagnostics"; \
+		kubectl get pods -n default -o wide; \
+		kubectl describe pod -n default -l name=zookeeper-operator; \
+		kubectl logs -n default -l name=zookeeper-operator --tail=200 || true; \
+		exit 1; \
+	}
 	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v
 	make undeploy
 
