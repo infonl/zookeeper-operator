@@ -96,22 +96,29 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.5.4
 CONTROLLER_TOOLS_VERSION ?= v0.22.0
-KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	# Retried: a bare single curl|bash here hit a transient SSL connect
-	# error (curl exit 35) in CI - the exact same install call succeeded in
-	# a sibling job 52s earlier/later, so it's the network blip, not the
-	# script or the pinned old release. Only bites more now that the E2E
-	# matrix runs this once per shard (8 concurrent installs) instead of
-	# once for the whole suite, so a few retries buys back that odds hit.
+	# Downloads the release asset tarball directly instead of the upstream
+	# hack/install_kustomize.sh (dropped entirely, along with the retry
+	# loop this replaced it with one commit ago - that fixed one flake but
+	# hit a second, worse one right after: install_kustomize.sh resolves
+	# the download URL via api.github.com, which enforces a 60-req/hour
+	# *anonymous* rate limit; the E2E matrix's 8 concurrent shards doing
+	# that at once exhausted it outright ("Github rate-limiter failed the
+	# request"), and unlike a transient SSL blip, retrying with a 5s
+	# backoff can't outlast an actual rate-limit window. A direct
+	# github.com/.../releases/download/... URL is a plain asset download,
+	# not an API call, so it isn't subject to that limit at all - verified
+	# live, both the linux_amd64 (CI) and darwin_amd64 (local Mac, same
+	# arm64 fallback the old script used - no arm64 build exists for this
+	# old a release) assets exist and download fine.
 	test -s $(LOCALBIN)/kustomize || { \
-		for i in 1 2 3 4 5; do \
-			curl -fsSL $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN) && break; \
-			echo "kustomize install attempt $$i failed, retrying in 5s..." >&2; \
-			sleep 5; \
-		done; \
+		os=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+		arch=amd64; \
+		curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F$(KUSTOMIZE_VERSION)/kustomize_$(KUSTOMIZE_VERSION)_$${os}_$${arch}.tar.gz" \
+			| tar xz -C $(LOCALBIN); \
+		chmod +x $(LOCALBIN)/kustomize; \
 		test -s $(LOCALBIN)/kustomize; \
 	}
 .PHONY: controller-gen
