@@ -18,12 +18,22 @@ TEST_REPO=testzkop/$(PROJECT_NAME)
 APP_REPO=pravega/$(APP_NAME)
 ALTREPO=emccorp/$(PROJECT_NAME)
 APP_ALTREPO=emccorp/$(APP_NAME)
+# Where this fork actually publishes to. REPO/APP_REPO above (and their
+# ALTREPO mirrors) are upstream pravega's/emccorp's own Docker Hub
+# namespaces - this fork has no credentials for either and couldn't push
+# there even if it wanted to. GHCR under the infonl org is this fork's own
+# registry, authenticated via the workflow's own GITHUB_TOKEN (already
+# granted packages:write - no extra secret needed). See `push` below.
+GHCR_REGISTRY=ghcr.io/infonl
+GHCR_REPO=$(GHCR_REGISTRY)/$(PROJECT_NAME)
+GHCR_APP_REPO=$(GHCR_REGISTRY)/$(APP_NAME)
+HELM_OCI_REGISTRY=oci://$(GHCR_REGISTRY)/charts
 VERSION=$(shell git describe --always --tags --dirty | tr -d "v" | sed "s/\(.*\)-g`git rev-parse --short HEAD`/\1/")
 GIT_SHA=$(shell git rev-parse --short HEAD)
 TEST_IMAGE=$(TEST_REPO)-testimages:$(VERSION)
 DOCKER_TEST_PASS=testzkop@123
 DOCKER_TEST_USER=testzkop
-.PHONY: all build check clean test
+.PHONY: all build check clean test zu-lock security-scan
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
 GOBIN=$(shell go env GOPATH)/bin
@@ -85,12 +95,32 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v3.5.4
-CONTROLLER_TOOLS_VERSION ?= v0.9.0
-KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
+CONTROLLER_TOOLS_VERSION ?= v0.22.0
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)
-	test -s $(LOCALBIN)/kustomize || { curl -s $(KUSTOMIZE_INSTALL_SCRIPT) | bash -s -- $(subst v,,$(KUSTOMIZE_VERSION)) $(LOCALBIN); }
+	# Downloads the release asset tarball directly instead of the upstream
+	# hack/install_kustomize.sh (dropped entirely, along with the retry
+	# loop this replaced it with one commit ago - that fixed one flake but
+	# hit a second, worse one right after: install_kustomize.sh resolves
+	# the download URL via api.github.com, which enforces a 60-req/hour
+	# *anonymous* rate limit; the E2E matrix's 8 concurrent shards doing
+	# that at once exhausted it outright ("Github rate-limiter failed the
+	# request"), and unlike a transient SSL blip, retrying with a 5s
+	# backoff can't outlast an actual rate-limit window. A direct
+	# github.com/.../releases/download/... URL is a plain asset download,
+	# not an API call, so it isn't subject to that limit at all - verified
+	# live, both the linux_amd64 (CI) and darwin_amd64 (local Mac, same
+	# arm64 fallback the old script used - no arm64 build exists for this
+	# old a release) assets exist and download fine.
+	test -s $(LOCALBIN)/kustomize || { \
+		os=$$(uname -s | tr '[:upper:]' '[:lower:]'); \
+		arch=amd64; \
+		curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F$(KUSTOMIZE_VERSION)/kustomize_$(KUSTOMIZE_VERSION)_$${os}_$${arch}.tar.gz" \
+			| tar xz -C $(LOCALBIN); \
+		chmod +x $(LOCALBIN)/kustomize; \
+		test -s $(LOCALBIN)/kustomize; \
+	}
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
 $(CONTROLLER_GEN): $(LOCALBIN)
@@ -138,6 +168,22 @@ build-zk-image:
 	docker build --build-arg VERSION=$(VERSION)  --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) -t $(APP_REPO):$(VERSION) ./docker
 	docker tag $(APP_REPO):$(VERSION) $(APP_REPO):latest
 
+# Regenerate the zu.jar dependency lock file (docker/zu/gradle.lockfile).
+# Run after changing anything in docker/zu/build.gradle.kts and commit the result.
+zu-lock:
+	docker run --rm -v "$(CURDIR)/docker/zu":/zu -w /zu eclipse-temurin:11-jdk \
+		./gradlew --no-daemon --write-locks :dependencies
+
+# Scan for HIGH/CRITICAL CVEs the same way CI does (needs trivy + docker locally).
+security-scan:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+	trivy fs --scanners vuln,misconfig --severity HIGH,CRITICAL --exit-code 1 \
+		--ignorefile .trivyignore --skip-dirs vendor,test --skip-files docker/zk-deps/pom.xml .
+	docker build -t $(REPO):scan .
+	trivy image --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed --ignorefile .trivyignore $(REPO):scan
+	docker build -t $(APP_REPO):scan ./docker
+	trivy image --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed --ignorefile .trivyignore $(APP_REPO):scan
+
 build-zk-image-swarm:
 	docker build --build-arg VERSION=$(VERSION)-swarm  --build-arg DOCKER_REGISTRY=$(DOCKER_REGISTRY) --build-arg GIT_SHA=$(GIT_SHA) \
 		-f ./docker/Dockerfile-swarm -t $(APP_REPO):$(VERSION)-swarm ./docker
@@ -147,13 +193,66 @@ test:
 
 test-e2e: test-e2e-remote
 
-test-e2e-remote:
+# FOCUS is a Ginkgo -focus regexp (matched against each spec's full
+# container+It description, e.g. the top-level `Describe("...")` text of one
+# test/e2e/*_test.go file). Left empty (the default), Ginkgo runs every spec -
+# this is what `make test-e2e` / `make test-e2e-remote` still do locally, and
+# what a single "run everything on one runner" CI job would set. CI instead
+# runs one matrix job per Describe block, each with its own FOCUS, its own
+# fresh minikube, and its own single-tenant ZookeeperCluster capacity - see
+# test-e2e-build-image below for why that split exists.
+FOCUS ?=
+
+# Split out of test-e2e-remote so CI can build+push the test image exactly
+# once and fan the (potentially many, resource-heavy) actual test run out
+# across several parallel single-purpose runners instead of one, without
+# rebuilding/pushing the same image once per runner.
+test-e2e-build-image:
 	make test-login
 	docker build . -t $(TEST_IMAGE)
 	docker push $(TEST_IMAGE)
+
+test-e2e-run:
 	make deploy
-	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v
-	make undeploy
+	# Fail fast (~2 min) with real diagnostics if the operator pod itself
+	# never becomes Ready, instead of masquerading as the Ginkgo suite's own
+	# 15-minute-per-spec ZookeeperCluster-readiness timeout (pkg/test/e2e/
+	# e2eutil.ReadyTimeout) with zero information about why - confirmed live
+	# that a ZookeeperCluster reconciles and gets pods in seconds once the
+	# operator pod is actually Running (see the CVE-remediation PR's own
+	# description for the local repro), so an operator pod that isn't Ready
+	# yet is the one thing this step exists to catch before wasting the
+	# Ginkgo suite's own budget on it.
+	kubectl rollout status deployment/zookeeper-operator -n default --timeout=120s || { \
+		echo "::error::zookeeper-operator did not become Ready within 120s - dumping diagnostics"; \
+		kubectl get pods -n default -o wide; \
+		kubectl describe pod -n default -l name=zookeeper-operator; \
+		kubectl logs -n default -l name=zookeeper-operator --tail=200 || true; \
+		exit 1; \
+	}
+	# Dump real cluster diagnostics on failure BEFORE undeploy tears
+	# everything down - a spec failing WaitForClusterToBecomeReady only
+	# ever reported "0/3 ready, pods ([])", with no visibility into *why*
+	# pods never appeared (ImagePullBackOff? FailedScheduling? a real
+	# CrashLoopBackOff?). Confirmed live that all of those are
+	# indistinguishable from the Ginkgo log alone, which cost real time
+	# chasing the wrong theory (cross-spec resource starvation, already
+	# fixed) when 6 of 8 *fully isolated* single-tenant shards failed with
+	# the exact same symptom in one run - something the sharding fix
+	# can't explain, so the next failure needs to say what actually
+	# happened instead of us guessing again.
+	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v -ginkgo.focus="$(FOCUS)"; e2e_status=$$?; \
+	if [ $$e2e_status -ne 0 ]; then \
+		echo "::group::E2E failed - cluster diagnostics before teardown"; \
+		kubectl get pods -n default -o wide; \
+		kubectl get events -n default --sort-by=.lastTimestamp | tail -100; \
+		for p in $$(kubectl get pods -n default -o name); do kubectl describe $$p -n default; done; \
+		echo "::endgroup::"; \
+	fi; \
+	make undeploy; \
+	exit $$e2e_status
+
+test-e2e-remote: test-e2e-build-image test-e2e-run
 
 test-e2e-local:
 	make deploy-test
@@ -163,25 +262,46 @@ test-e2e-local:
 run-local:
 	go run ./main.go
 
+# For local `make push`/`make push-charts` use: set DOCKER_USER to your
+# GitHub username and DOCKER_PASS to a PAT with write:packages scope. CI
+# does not call this target - it logs in to ghcr.io itself (via
+# GITHUB_TOKEN) as a separate workflow step before `make push` runs, since
+# that credential only exists inside the Actions run, not as a Make var.
 login:
-	@docker login -u "$(DOCKER_USER)" -p "$(DOCKER_PASS)"
+	@docker login ghcr.io -u "$(DOCKER_USER)" -p "$(DOCKER_PASS)"
 
 test-login:
 	echo "$(DOCKER_TEST_PASS)" | docker login -u "$(DOCKER_TEST_USER)" --password-stdin
 
-push: build-image build-zk-image login
-	docker push $(REPO):$(VERSION)
-	docker push $(REPO):latest
-	docker push $(APP_REPO):$(VERSION)
-	docker push $(APP_REPO):latest
-	docker tag $(REPO):$(VERSION) $(ALTREPO):$(VERSION)
-	docker tag $(REPO):$(VERSION) $(ALTREPO):latest
-	docker tag $(APP_REPO):$(VERSION) $(APP_ALTREPO):$(VERSION)
-	docker tag $(APP_REPO):$(VERSION) $(APP_ALTREPO):latest
-	docker push $(ALTREPO):$(VERSION)
-	docker push $(ALTREPO):latest
-	docker push $(APP_ALTREPO):$(VERSION)
-	docker push $(APP_ALTREPO):latest
+# Publishes both images to this fork's own registry (see GHCR_REPO/
+# GHCR_APP_REPO above). Assumes an existing `docker login ghcr.io` session
+# (`make login` locally, or the workflow's own login step in CI) - doesn't
+# call `login` itself so CI's own login isn't clobbered by a second,
+# credential-less one running here.
+push: build-image build-zk-image
+	docker tag $(REPO):$(VERSION) $(GHCR_REPO):$(VERSION)
+	docker tag $(REPO):$(VERSION) $(GHCR_REPO):latest
+	docker tag $(APP_REPO):$(VERSION) $(GHCR_APP_REPO):$(VERSION)
+	docker tag $(APP_REPO):$(VERSION) $(GHCR_APP_REPO):latest
+	docker push $(GHCR_REPO):$(VERSION)
+	docker push $(GHCR_REPO):latest
+	docker push $(GHCR_APP_REPO):$(VERSION)
+	docker push $(GHCR_APP_REPO):latest
+
+# Packages and OCI-pushes every chart under charts/ (currently
+# zookeeper-operator and zookeeper) to ghcr.io/infonl/charts/<name>,
+# tagged with that chart's own Chart.yaml `version` - bump that (and
+# `appVersion`, kept in sync with the image tag above) to cut a new chart
+# release. Assumes an existing `helm registry login ghcr.io` session, same
+# reasoning as `push` above.
+push-charts:
+	@mkdir -p /tmp/helm-package-out
+	@for c in charts/*/; do \
+		name=$$(basename $$c); \
+		helm package $$c -d /tmp/helm-package-out; \
+		version=$$(sed -n 's/^version: *//p' $$c/Chart.yaml); \
+		helm push /tmp/helm-package-out/$$name-$$version.tgz $(HELM_OCI_REGISTRY); \
+	done
 
 clean:
 	rm -f bin/$(PROJECT_NAME)
