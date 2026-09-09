@@ -46,6 +46,7 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | `additionalVolumes` | Additional volumes required for sidecars | `[]` |
 | `affinity` | Specifies scheduling constraints on pods | `{}` |
 | `annotations` | Operator pod annotations | `{}` |
+| `containerSecurityContext` | Container-level securityContext for the operator container | `{runAsNonRoot: true, runAsUser: 65532, allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}` |
 | `crd.create` | Create zookeeper CRD | `true` |
 | `disableFinalizer` | Disable finalizer for zookeeper clusters, PVCs clean-up will be skipped.| `false` |
 | `global.imagePullSecrets` | Lists of secrets to use to pull zookeeper-operator image from a private registry | `[]` |
@@ -54,12 +55,13 @@ The following table lists the configurable parameters of the zookeeper-operator 
 | `hooks.image.repository` | Image repository for batch jobs | `"alpine/kubectl"` |
 | `hooks.image.tag` | Image tag for batch jobs | `"1.34.2"` |
 | `image.pullPolicy` | Image pull policy | `IfNotPresent` |
-| `image.repository` | Image repository | `pravega/zookeeper-operator` |
-| `image.tag` | Image tag | `0.2.15` |
+| `image.repository` | Image repository | `ghcr.io/infonl/zookeeper-operator` |
+| `image.tag` | Image tag | `0.2.15-cve.1` |
 | `labels` | Operator pod labels | `{}` |
 | `nodeSelector` | Map of key-value pairs to be present as labels in the node in which the pod should run | `{}` |
 | `rbac.create` | Create RBAC resources | `true` |
 | `resources` | Specifies resource requirements for the container | `{}` |
+| `securityContext` | Pod-level securityContext for the operator Deployment | `{runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}` |
 | `serviceAccount.create` | Create service account | `true` |
 | `serviceAccount.name` | Name for the service account | `zookeeper-operator` |
 | `tolerations` | Specifies the pod's tolerations | `[]` |

@@ -100,4 +100,5 @@ COPY zk-lib-override.sh /tmp/zk-lib-override.sh
 RUN sh /tmp/zk-lib-override.sh /apache-zookeeper-3.9.5-bin/lib /tmp/zk-overrides && \
     rm -rf /tmp/zk-overrides /tmp/zk-lib-override.sh
 # Runs as root like the upstream image; /docker-entrypoint.sh drops to the
-# unprivileged `zookeeper` user via gosu.
+# unprivileged `zookeeper` user via setpriv (swapped in from upstream's gosu
+# above - see the comment on the sed replacing it).

@@ -15,10 +15,15 @@ LIB="${1:?lib dir required}"
 SRC="${2:?overrides dir required}"
 
 # Artifacts that MUST be present in the base image and get replaced.
+# logback-classic's transitive slf4j-api is included here too (see
+# docker/zk-deps/pom.xml) - it's copied to $SRC and processed by the loop
+# below like any other override jar, but without it in REQUIRED a future
+# base image dropping/renaming its bundled slf4j-api wouldn't fail the
+# build, silently leaving logback/slf4j mismatched at runtime.
 REQUIRED="netty-buffer netty-codec netty-common netty-handler netty-resolver
 netty-transport netty-transport-classes-epoll netty-transport-native-epoll
 netty-transport-native-unix-common jackson-annotations jackson-core
-jackson-databind jline logback-classic logback-core"
+jackson-databind jline logback-classic logback-core slf4j-api"
 
 replaced_list=""
 
