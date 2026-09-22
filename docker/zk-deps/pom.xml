@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.pravega.zookeeper</groupId>
+  <artifactId>zk-lib-cve-overrides</artifactId>
+  <version>3.9.5</version>
+  <packaging>pom</packaging>
+
+  <!--
+    CVE-fixed replacements for jars bundled in the `zookeeper:3.9.5-jre-17`
+    image under /apache-zookeeper-3.9.5-bin/lib.
+
+    `mvn package` resolves these from Maven Central (with SHA-1 checksum
+    verification) and copies the full runtime closure - every transitive
+    dependency at the same CVE-fixed version - to /overrides. The Dockerfile
+    then runs docker/zk-lib-override.sh, which swaps them into the image and
+    FAILS THE BUILD if an expected jar is not present (guards against a future
+    ZK base image reorganising its bundled dependency set).
+
+    Keep <netty.version> identical to docker/zu/build.gradle.kts.
+
+    Known findings that are NOT fixable here (no public release exists):
+      org.eclipse.jetty 9.4.58.v20250814 - CVE-2026-2332, CVE-2026-10050
+        9.4.60 / 9.4.63 are Eclipse "Jetty support" (paid) only and are not on
+        Maven Central; ZooKeeper 3.9.x cannot move to Jetty 10+/12 (javax ->
+        jakarta servlet namespace). Documented + suppressed in .trivyignore,
+        with a NetworkPolicy restricting the admin/metrics ports as the
+        compensating control (see SECURITY.md).
+  -->
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.test.skip>true</maven.test.skip>
+
+    <!-- ZK 3.9.5 ships 4.1.130.Final:
+         netty-codec   CVE-2026-42583, CVE-2026-59901
+         netty-handler CVE-2026-44249, CVE-2026-45416, CVE-2026-50010 -->
+    <netty.version>4.1.137.Final</netty.version>
+
+    <!-- ZK 3.9.5 ships 2.15.2:
+         jackson-core     GHSA-r7wm-3cxj-wff9
+         jackson-databind CVE-2026-54512, CVE-2026-54513 -->
+    <jackson.version>2.21.6</jackson.version>
+
+    <!-- ZK 3.9.5 ships 3.25.1: CVE-2026-56740, CVE-2026-56741 -->
+    <jline.version>3.30.16</jline.version>
+
+    <!-- ZK 3.9.5 ships logback 1.3.15: CVE-2025-11226 (+ CVE-2026-1225 /
+         CVE-2026-9828 / CVE-2026-10532 LOW, fixed only on the 1.5.x line).
+         logback 1.5.x needs slf4j 2.0.x (ZK ships 2.0.13) and Java 11+
+         (the image is jre-17). Pulls a matching slf4j-api transitively. -->
+    <logback.version>1.5.38</logback.version>
+  </properties>
+
+  <dependencies>
+    <!-- netty-handler transitively pulls buffer/codec/common/resolver/
+         transport/transport-native-unix-common at the same version. -->
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-handler</artifactId>
+      <version>${netty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-classes-epoll</artifactId>
+      <version>${netty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty-transport-native-epoll</artifactId>
+      <version>${netty.version}</version>
+      <classifier>linux-x86_64</classifier>
+    </dependency>
+
+    <!-- jackson-databind transitively pulls jackson-core + jackson-annotations. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.jline</groupId>
+      <artifactId>jline</artifactId>
+      <version>${jline.version}</version>
+    </dependency>
+
+    <!-- logback-classic transitively pulls logback-core + a matching slf4j-api. -->
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <version>${logback.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.8.1</version>
+        <executions>
+          <execution>
+            <id>copy-cve-overrides</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>/overrides</outputDirectory>
+              <includeScope>runtime</includeScope>
+              <useBaseVersion>true</useBaseVersion>
+              <overWriteReleases>true</overWriteReleases>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

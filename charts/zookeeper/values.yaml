@@ -2,8 +2,12 @@ replicas: 3
 maxUnavailableReplicas:
 
 image:
-  repository: pravega/zookeeper
-  tag: 0.2.15
+  # This fork's own ghcr.io/infonl image (CVE-remediated, rebased onto the
+  # official zookeeper:3.9.5-jre-17 - see docker/Dockerfile), not upstream
+  # pravega/zookeeper - this fork has no credentials to publish there, and
+  # it still carries the CVEs this fork exists to fix.
+  repository: ghcr.io/infonl/zookeeper
+  tag: 0.2.15-cve.1
   pullPolicy: IfNotPresent
 
 triggerRollingRestart: false
@@ -48,7 +52,28 @@ pod:
 
 adminServerService: {}
   # annotations: {}
-  # external: false
+  # external: false   # keep false: the AdminServer runs on Jetty 9.4.x, which
+  #                   # carries un-patchable CVEs (see SECURITY.md). Do not put
+  #                   # a LoadBalancer in front of :8080.
+
+# Opt-in ingress NetworkPolicy for the ZK pods. Off by default; review the
+# selectors against your cluster topology before enabling. See SECURITY.md.
+networkPolicy:
+  enabled: false
+  # Sources allowed to reach the client port (2181). Empty list = allow from
+  # anywhere. Must still include the zookeeper-operator and your ZK clients.
+  clientFrom: []
+  #  - namespaceSelector:
+  #      matchLabels:
+  #        kubernetes.io/metadata.name: zookeeper-operator
+  # Sources allowed to reach AdminServer (8080) and metrics (7000).
+  # Defaults to "same namespace only" when empty.
+  adminAndMetricsFrom: []
+  #  - namespaceSelector:
+  #      matchLabels:
+  #        kubernetes.io/metadata.name: monitoring
+  # Extra raw ingress rules appended verbatim.
+  extraIngress: []
 
 clientService: {}
   # annotations: {}
@@ -96,8 +121,11 @@ ephemeral:
 
 hooks:
   image:
-    repository: lachlanevenson/k8s-kubectl
-    tag: v1.23.2
+    # alpine/kubectl: maintained, versioned, Alpine-based (the hook scripts are
+    # /bin/sh). NOT registry.k8s.io/kubectl - that image is distroless with no
+    # shell, which breaks the shell-based validation hooks.
+    repository: alpine/kubectl
+    tag: "1.34.2"
     securityContext: {}
     #  runAsUser: 1001
     #  runAsGroup: 1001

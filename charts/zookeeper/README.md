@@ -90,7 +90,11 @@ The following table lists the configurable parameters of the zookeeper chart and
 | `headlessService.annotations` | Specifies the annotations to attach to headless Service the operator creates. | {} |
 | `adminServerService` | Defines the policy to create AdminServer Service for the zookeeper cluster. | {} |
 | `adminServerService.annotations` | Specifies the annotations to attach to AdminServer Service the operator creates. | {} |
-| `adminServerService.external` | Specifies if LoadBalancer should be created for the AdminServer. True means LoadBalancer will be created, false - only ClusterIP will be used. | false |
+| `adminServerService.external` | Specifies if LoadBalancer should be created for the AdminServer. True means LoadBalancer will be created, false - only ClusterIP will be used. Keep `false`: the AdminServer runs on Jetty 9.4.x, which has un-patchable CVEs (see `SECURITY.md`). | false |
+| `networkPolicy.enabled` | Create an opt-in ingress NetworkPolicy for the ZK pods. Restricts AdminServer (`:8080`) and metrics (`:7000`) to same-namespace / selected peers. Review selectors before enabling. | false |
+| `networkPolicy.clientFrom` | Ingress sources allowed to reach the client port `:2181`. Empty = allow from anywhere. Must still permit the operator and your clients. | `[]` |
+| `networkPolicy.adminAndMetricsFrom` | Ingress sources allowed to reach `:8080` and `:7000`. Empty = same namespace only. | `[]` |
+| `networkPolicy.extraIngress` | Extra raw ingress rules appended to the NetworkPolicy verbatim. | `[]` |
 | `config.initLimit` | Amount of time (in ticks) to allow followers to connect and sync to a leader | `10` |
 | `config.tickTime` | Length of a single tick which is the basic time unit used by Zookeeper (measured in milliseconds) | `2000` |
 | `config.syncLimit` | Amount of time (in ticks) to allow followers to sync with Zookeeper | `2` |
