@@ -117,7 +117,14 @@ var _ = BeforeSuite(func() {
 		}()
 	}
 
-}, 60)
+	// The trailing "60" here was a ginkgo v1 per-node timeout (seconds) --
+	// v2 interprets a BeforeSuite's trailing arguments as decorators, not a
+	// raw number, and panics at spec-tree-construction time ("Unknown
+	// Decorator") before any spec runs. Dropped rather than replaced with
+	// NodeTimeout, which needs this closure to take a SpecContext and
+	// thread it through every blocking call below -- the suite-level
+	// `-timeout 2h` (Makefile's test-e2e-run) already bounds the whole run.
+})
 
 /*
 Kubebuilder also generates boilerplate functions for cleaning up envtest and actually running your test files in your controllers/ directory.
