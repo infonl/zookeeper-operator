@@ -11,7 +11,7 @@
 package e2e
 
 import (
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	api "github.com/pravega/zookeeper-operator/api/v1beta1"
 	zk_e2eutil "github.com/pravega/zookeeper-operator/pkg/test/e2e/e2eutil"

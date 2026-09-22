@@ -241,7 +241,7 @@ test-e2e-run:
 	# the exact same symptom in one run - something the sharding fix
 	# can't explain, so the next failure needs to say what actually
 	# happened instead of us guessing again.
-	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v -ginkgo.focus="$(FOCUS)"; e2e_status=$$?; \
+	RUN_LOCAL=false go test -v -timeout 2h ./test/e2e... -args -ginkgo.v -ginkgo.focus="$(FOCUS)" -ginkgo.fail-on-empty; e2e_status=$$?; \
 	if [ $$e2e_status -ne 0 ]; then \
 		echo "::group::E2E failed - cluster diagnostics before teardown"; \
 		kubectl get pods -n default -o wide; \

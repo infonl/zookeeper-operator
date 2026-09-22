@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"testing"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -150,7 +150,7 @@ var _ = AfterEach(func() {
 	// restarting failed container" - a real crash, not the image-pull/
 	// scheduling/resource-starvation theories chased before this - but with
 	// nothing there saying *why* it crashed.
-	if CurrentGinkgoTestDescription().Failed {
+	if CurrentSpecReport().Failed() {
 		dumpPodLogs()
 	}
 
