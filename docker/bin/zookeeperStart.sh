@@ -11,6 +11,18 @@
 
 set -ex
 
+# Run ZooKeeper unprivileged. The operator starts pods with this script as the
+# container command, which bypasses the image's docker-entrypoint.sh (where the
+# setpriv drop to the `zookeeper` user lives), so without this the JVM runs as
+# root. When started as root: hand the data/log dirs to `zookeeper` (volumes
+# written by older, root-running images are root-owned) and re-exec this script
+# as that user. A pod with a non-root securityContext (runAsUser/fsGroup) skips
+# this block. Set ZK_RUN_AS_ROOT=true to keep the old behaviour.
+if [[ "$(id -u)" == "0" && "${ZK_RUN_AS_ROOT:-false}" != "true" ]]; then
+  chown -R zookeeper:zookeeper /data /datalog /logs 2>/dev/null || true
+  exec setpriv --reuid=zookeeper --regid=zookeeper --init-groups "$0" "$@"
+fi
+
 source /conf/env.sh
 source /usr/local/bin/zookeeperFunctions.sh
 

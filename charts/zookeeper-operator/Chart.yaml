@@ -1,8 +1,8 @@
 apiVersion: v2
 name: zookeeper-operator
 description: Zookeeper Operator Helm chart for Kubernetes
-version: 0.2.16
-appVersion: 0.2.15-cve.1
+version: 0.2.16-rc.2
+appVersion: 0.2.16-rc.2
 keywords:
 - zookeeper
 - storage

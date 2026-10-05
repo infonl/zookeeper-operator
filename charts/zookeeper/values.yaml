@@ -7,7 +7,7 @@ image:
   # pravega/zookeeper - this fork has no credentials to publish there, and
   # it still carries the CVEs this fork exists to fix.
   repository: ghcr.io/infonl/zookeeper
-  tag: 0.2.15-cve.1
+  tag: 0.2.16-rc.2
   pullPolicy: IfNotPresent
 
 triggerRollingRestart: false
@@ -45,7 +45,16 @@ pod:
   # tolerations: []
   # env: []
   # annotations: {}
-  # securityContext: {}
+  # Run the whole pod as the image's unprivileged `zookeeper` user (uid/gid
+  # 1000). fsGroup makes the data volume writable for it, including volumes
+  # written by earlier root-running images. Set to {} to start as root; the
+  # start script then still drops to `zookeeper` before launching the JVM.
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
   # terminationGracePeriodSeconds: 30
   serviceAccountName: zookeeper
   # imagePullSecrets: []

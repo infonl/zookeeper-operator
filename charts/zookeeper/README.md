@@ -80,7 +80,7 @@ The following table lists the configurable parameters of the zookeeper chart and
 | `pod.tolerations` | Specifies the pod's tolerations | `[]` |
 | `pod.env` | List of environment variables to set in the container | `[]` |
 | `pod.annotations` | Specifies the annotations to attach to pods | `{}` |
-| `pod.securityContext` | Specifies the security context for the entire pod | `{}` |
+| `pod.securityContext` | Specifies the security context for the entire pod. Defaults to the unprivileged `zookeeper` user (uid/gid 1000, `fsGroup` 1000); set `{}` to start as root | `{runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch}` |
 | `pod.terminationGracePeriodSeconds` | Amount of time given to the pod to shutdown normally | `30` |
 | `pod.serviceAccountName` | Name for the service account | `zookeeper` |
 | `pod.imagePullSecrets` | ImagePullSecrets is a list of references to secrets in the same namespace to use for pulling any images. | `[]` |
