@@ -213,6 +213,56 @@ var _ = Describe("Generators Spec", func() {
 			It("should have blank topologySpreadConstraints", func() {
 				Ω(sts.Spec.Template.Spec.TopologySpreadConstraints).To(HaveLen(0))
 			})
+
+			It("should run the pod as the non-root zookeeper user by default", func() {
+				sc := sts.Spec.Template.Spec.SecurityContext
+				Ω(sc).ShouldNot(BeNil())
+				Ω(*sc.RunAsNonRoot).To(BeTrue())
+				Ω(*sc.RunAsUser).To(BeEquivalentTo(1000))
+				Ω(*sc.RunAsGroup).To(BeEquivalentTo(1000))
+				Ω(*sc.FSGroup).To(BeEquivalentTo(1000))
+				Ω(*sc.FSGroupChangePolicy).To(Equal(v1.FSGroupChangeOnRootMismatch))
+			})
+		})
+
+		Context("with an empty pod securityContext", func() {
+
+			BeforeEach(func() {
+				z := &v1beta1.ZookeeperCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "default"},
+					Spec: v1beta1.ZookeeperClusterSpec{
+						Pod: v1beta1.PodPolicy{SecurityContext: &v1.PodSecurityContext{}},
+					},
+				}
+				z.WithDefaults()
+				sts = zk.MakeStatefulSet(z)
+			})
+
+			It("should fall back to the non-root default", func() {
+				Ω(sts.Spec.Template.Spec.SecurityContext).To(Equal(zk.DefaultPodSecurityContext()))
+			})
+		})
+
+		Context("with an explicit pod securityContext", func() {
+
+			BeforeEach(func() {
+				root := int64(0)
+				z := &v1beta1.ZookeeperCluster{
+					ObjectMeta: metav1.ObjectMeta{Name: "example", Namespace: "default"},
+					Spec: v1beta1.ZookeeperClusterSpec{
+						Pod: v1beta1.PodPolicy{SecurityContext: &v1.PodSecurityContext{RunAsUser: &root}},
+					},
+				}
+				z.WithDefaults()
+				sts = zk.MakeStatefulSet(z)
+			})
+
+			It("should use it unchanged", func() {
+				sc := sts.Spec.Template.Spec.SecurityContext
+				Ω(*sc.RunAsUser).To(BeEquivalentTo(0))
+				Ω(sc.FSGroup).To(BeNil())
+				Ω(sc.RunAsNonRoot).To(BeNil())
+			})
 		})
 
 		Context("with pod policy annotations", func() {
