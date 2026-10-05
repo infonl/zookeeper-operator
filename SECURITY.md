@@ -64,7 +64,7 @@ Currently overridden (all transitive deps pinned to the same version):
 | Library | Base image | Overridden to | CVEs |
 |---------|-----------|---------------|------|
 | Netty (`netty-*`, not `tcnative`) | 4.1.130.Final | 4.1.137.Final | CVE-2026-42583, CVE-2026-59901, CVE-2026-44249, CVE-2026-45416, CVE-2026-50010 |
-| Jackson (`jackson-*`) | 2.15.2 | 2.21.6 | GHSA-r7wm-3cxj-wff9, CVE-2026-54512, CVE-2026-54513 |
+| Jackson (`jackson-*`) | 2.15.2 | 2.21.7 | GHSA-r7wm-3cxj-wff9, CVE-2026-54512, CVE-2026-54513, CVE-2026-89407, CVE-2026-89425, CVE-2026-91776, CVE-2026-91777 |
 | JLine (`jline`) | 3.25.1 | 3.30.16 | CVE-2026-56740, CVE-2026-56741 |
 | Logback (`logback-classic`, `logback-core`) + `slf4j-api` | 1.3.15 / 2.0.13 | 1.5.38 / 2.0.17 | CVE-2025-11226 (+ CVE-2026-1225, CVE-2026-9828, CVE-2026-10532 LOW) |
 

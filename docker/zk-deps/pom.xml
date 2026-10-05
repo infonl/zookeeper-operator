@@ -40,9 +40,9 @@
     <netty.version>4.1.137.Final</netty.version>
 
     <!-- ZK 3.9.5 ships 2.15.2:
-         jackson-core     GHSA-r7wm-3cxj-wff9
-         jackson-databind CVE-2026-54512, CVE-2026-54513 -->
-    <jackson.version>2.21.6</jackson.version>
+         jackson-core     GHSA-r7wm-3cxj-wff9, CVE-2026-89407, CVE-2026-89425
+         jackson-databind CVE-2026-54512, CVE-2026-54513, CVE-2026-91776, CVE-2026-91777 -->
+    <jackson.version>2.21.7</jackson.version>
 
     <!-- ZK 3.9.5 ships 3.25.1: CVE-2026-56740, CVE-2026-56741 -->
     <jline.version>3.30.16</jline.version>
