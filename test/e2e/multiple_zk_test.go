@@ -43,8 +43,12 @@ var _ = Describe("Operations with multiple cluster", func() {
 			defaultCluster.Status.Init()
 			defaultCluster.Spec.Persistence.VolumeReclaimPolicy = "Delete"
 			defaultCluster.ObjectMeta.Name = "zk2"
-			initialVersion := "0.2.7"
-			upgradeVersion := "0.2.9"
+			// The supported migration path: upstream pravega 0.2.15 (the last
+			// upstream release; older images keep zu.jar in /root and cannot
+			// run as the non-root default) -> this fork's image.
+			initialVersion := "0.2.15"
+			upgradeVersion := "0.2.16-rc.2"
+			upgradeRepository := "ghcr.io/infonl/zookeeper"
 			defaultCluster.Spec.Image = api.ContainerImage{
 				Repository: "pravega/zookeeper",
 				Tag:        initialVersion,
@@ -98,6 +102,7 @@ var _ = Describe("Operations with multiple cluster", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			//upgrade the image in second Cluster
+			zk2.Spec.Image.Repository = upgradeRepository
 			zk2.Spec.Image.Tag = upgradeVersion
 
 			Expect(zk_e2eutil.UpdateCluster(logger, k8sClient, zk2)).NotTo(HaveOccurred())

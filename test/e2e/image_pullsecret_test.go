@@ -26,8 +26,11 @@ var _ = Describe("Image pull secret check", func() {
 			defaultCluster.WithDefaults()
 			defaultCluster.Status.Init()
 			defaultCluster.Spec.Persistence.VolumeReclaimPolicy = "Delete"
-			defaultCluster.Spec.Image.Repository = "testanisha/zookeeper"
-			defaultCluster.Spec.Image.Tag = "checksecret_1"
+			// Any public image works: the spec only checks that a cluster with
+			// ImagePullSecrets set comes up. (testanisha/zookeeper:checksecret_1
+			// predates 0.2.15 and cannot run as the non-root default.)
+			defaultCluster.Spec.Image.Repository = "pravega/zookeeper"
+			defaultCluster.Spec.Image.Tag = "0.2.15"
 			defaultCluster.Spec.Pod.ImagePullSecrets = []v1.LocalObjectReference{
 				{
 					Name: "regcred",

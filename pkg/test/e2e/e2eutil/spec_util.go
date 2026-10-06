@@ -28,21 +28,15 @@ func NewDefaultCluster(namespace string) *api.ZookeeperCluster {
 			Namespace: namespace,
 		},
 		Spec: api.ZookeeperClusterSpec{
-			// Pinned explicitly, NOT left to WithDefaults()'s own
-			// DefaultZkContainerRepository/Version fallback: that default now
-			// points at ghcr.io/infonl/zookeeper, this fork's own CVE-remediated
-			// image, which doesn't exist yet - it's only published once a real
-			// release actually runs the new `make push` GHCR pipeline (see
-			// .github/workflows/ci.yaml's publish job). Every spec that doesn't
-			// override Spec.Image (5 of 8 - upgrade_test.go, multiple_zk_test.go
-			// and image_pullsecret_test.go already set their own explicitly)
-			// goes through this constructor, so pointing it at a not-yet-published
-			// image would ImagePullBackOff the whole suite. Remove this override
-			// once ghcr.io/infonl/zookeeper:0.2.15-cve.1 is real and the E2E suite
-			// should start exercising the actual product default too.
+			// Pinned to this fork's last *published* ZooKeeper image rather than
+			// WithDefaults()' DefaultZkContainerVersion: the default names the
+			// release this commit becomes, whose image only exists after the
+			// publish job of that release has run. Bump with each release.
+			// (upgrade_test.go, multiple_zk_test.go and image_pullsecret_test.go
+			// set their own images.)
 			Image: api.ContainerImage{
-				Repository: "pravega/zookeeper",
-				Tag:        "0.2.15",
+				Repository: "ghcr.io/infonl/zookeeper",
+				Tag:        "0.2.16-rc.2",
 			},
 		},
 	}
