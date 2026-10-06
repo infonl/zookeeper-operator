@@ -1,0 +1,46 @@
+version: 2
+updates:
+  # Operator Go module
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      k8s:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+      golang-x:
+        patterns:
+          - "golang.org/x/*"
+
+  # Operator image (root Dockerfile)
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+
+  # ZooKeeper server image
+  - package-ecosystem: docker
+    directory: "/docker"
+    schedule:
+      interval: weekly
+
+  # ZooKeeper server image – CVE override dependency set (see docker/zk-deps/pom.xml)
+  - package-ecosystem: maven
+    directory: "/docker/zk-deps"
+    schedule:
+      interval: weekly
+
+  # zu.jar helper build
+  - package-ecosystem: gradle
+    directory: "/docker/zu"
+    schedule:
+      interval: weekly
+
+  # CI workflows
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

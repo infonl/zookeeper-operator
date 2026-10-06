@@ -212,6 +212,18 @@ func DeletePods(logger logr.Logger, k8client client.Client, z *api.ZookeeperClus
 	if err != nil {
 		return err
 	}
+	// Fail with a clear error instead of panicking (index out of range) when
+	// the cluster hasn't actually reached `size` pods yet - confirmed live
+	// this is reachable: a cluster still short of its target replica count
+	// (e.g. still starting up, or the environment is resource-constrained)
+	// has fewer than `size` Pods to list here, and the caller's own
+	// WaitForClusterToBecomeReady precondition is exactly what's supposed
+	// to rule this out, so surfacing it as a normal test failure (not a
+	// panic) also makes the real precondition failure visible instead of
+	// being masked by an unrelated-looking stack trace.
+	if len(podList.Items) < size {
+		return fmt.Errorf("expected at least %d pods for cluster %s, found %d", size, z.GetName(), len(podList.Items))
+	}
 	pod := &corev1.Pod{}
 
 	for i := 0; i < size; i++ {

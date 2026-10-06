@@ -27,24 +27,36 @@ func NewDefaultCluster(namespace string) *api.ZookeeperCluster {
 			Name:      "zookeeper",
 			Namespace: namespace,
 		},
-		Spec: api.ZookeeperClusterSpec{},
+		Spec: api.ZookeeperClusterSpec{
+			// Pinned to this fork's last *published* ZooKeeper image rather than
+			// WithDefaults()' DefaultZkContainerVersion: the default names the
+			// release this commit becomes, whose image only exists after the
+			// publish job of that release has run. Bump with each release.
+			// (upgrade_test.go, multiple_zk_test.go and image_pullsecret_test.go
+			// set their own images.)
+			Image: api.ContainerImage{
+				Repository: "ghcr.io/infonl/zookeeper",
+				Tag:        "0.2.16-rc.2",
+			},
+		},
 	}
 }
 
 func NewClusterWithVersion(namespace, version string) *api.ZookeeperCluster {
 	cluster := NewDefaultCluster(namespace)
-	cluster.Spec = api.ZookeeperClusterSpec{
-		Image: api.ContainerImage{
-			Tag: version,
-		},
-	}
+	// Overwrite only the tag - reusing NewDefaultCluster's own pinned Image
+	// (see its comment) rather than replacing the whole Spec, so this also
+	// stays off the not-yet-published DefaultZkContainerRepository default.
+	cluster.Spec.Image.Tag = version
 	return cluster
 }
 
 func NewClusterWithEmptyDir(namespace string) *api.ZookeeperCluster {
 	cluster := NewDefaultCluster(namespace)
-	cluster.Spec = api.ZookeeperClusterSpec{
-		StorageType: "ephemeral",
-	}
+	// Add StorageType without discarding NewDefaultCluster's pinned Image -
+	// a wholesale `cluster.Spec = ZookeeperClusterSpec{...}` here previously
+	// dropped it back to the WithDefaults() fallback, same reasoning as
+	// NewClusterWithVersion above.
+	cluster.Spec.StorageType = "ephemeral"
 	return cluster
 }

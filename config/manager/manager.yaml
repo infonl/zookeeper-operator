@@ -13,6 +13,10 @@ spec:
         name: zookeeper-operator
     spec:
       serviceAccountName: zookeeper-operator
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: zookeeper-operator
           # Replace this with the built image name
@@ -23,6 +27,22 @@ spec:
           command:
           - zookeeper-operator
           imagePullPolicy: Always
+          # Safe to lock down fully: the manager binary (this Deployment's own
+          # `command`) never writes to its own filesystem at runtime - the only
+          # code path that does (pkg/yamlexporter, os.Create/os.MkdirAll) is
+          # reachable exclusively from the separate `cmd/exporter` CLI binary
+          # via GenerateYAML/YAMLExporterReconciler, which Reconcile() never
+          # calls. The base image is distroless/static-debian12:nonroot
+          # (already UID 65532 by default); runAsUser is pinned explicitly so
+          # the intent is visible in the manifest, not just inherited.
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           env:
           - name: WATCH_NAMESPACE
             valueFrom:

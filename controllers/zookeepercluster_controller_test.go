@@ -30,7 +30,7 @@ import (
 	"github.com/pravega/zookeeper-operator/pkg/controller/config"
 	"github.com/pravega/zookeeper-operator/pkg/zk"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 

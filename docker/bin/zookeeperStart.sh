@@ -11,6 +11,19 @@
 
 set -ex
 
+# Fallback privilege drop. The operator runs ZooKeeper pods as the `zookeeper`
+# user by default (pod securityContext uid/gid 1000 + fsGroup, see
+# DefaultPodSecurityContext in pkg/zk/generators.go), so normally this script
+# already starts unprivileged and skips this block. It only applies when a
+# cluster explicitly sets a root securityContext: hand the data/log dirs to
+# `zookeeper` and re-exec this script as that user (this script is the container
+# command, so the image's docker-entrypoint.sh setpriv drop never runs).
+# Set ZK_RUN_AS_ROOT=true to really run the JVM as root.
+if [[ "$(id -u)" == "0" && "${ZK_RUN_AS_ROOT:-false}" != "true" ]]; then
+  chown -R zookeeper:zookeeper /data /datalog /logs 2>/dev/null || true
+  exec setpriv --reuid=zookeeper --regid=zookeeper --init-groups "$0" "$@"
+fi
+
 source /conf/env.sh
 source /usr/local/bin/zookeeperFunctions.sh
 

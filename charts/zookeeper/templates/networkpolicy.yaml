@@ -1,0 +1,65 @@
+{{- if .Values.networkPolicy.enabled }}
+# Opt-in ingress NetworkPolicy for the ZooKeeper ensemble pods.
+#
+# Primary purpose: keep the Jetty-backed AdminServer (:8080) and Prometheus
+# metrics endpoint (:7000) off untrusted networks, as the compensating control
+# for the un-patchable Jetty 9.4.x CVEs (see SECURITY.md / .trivyignore).
+#
+# NOTE: enabling this denies every ingress flow to the ZK pods that is not
+# listed below. Make sure `clientFrom` still permits the zookeeper-operator
+# (it connects on :2181 to drive dynamic reconfiguration) and any application
+# clients, and that `adminAndMetricsFrom` permits your Prometheus.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ template "zookeeper.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+{{ include "zookeeper.commonLabels" . | indent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ template "zookeeper.fullname" . }}
+  policyTypes:
+    - Ingress
+  ingress:
+    # ZooKeeper client port.
+    - ports:
+        - port: 2181
+          protocol: TCP
+      {{- with .Values.networkPolicy.clientFrom }}
+      from:
+{{ toYaml . | indent 8 }}
+      {{- end }}
+
+    # Quorum (2888) and leader election (3888) - ensemble members only.
+    - ports:
+        - port: 2888
+          protocol: TCP
+        - port: 3888
+          protocol: TCP
+      from:
+        - podSelector:
+            matchLabels:
+              app: {{ template "zookeeper.fullname" . }}
+
+    # AdminServer (8080, Jetty) and Prometheus metrics (7000).
+    - ports:
+        - port: 8080
+          protocol: TCP
+        - port: 7000
+          protocol: TCP
+      from:
+        {{- with .Values.networkPolicy.adminAndMetricsFrom }}
+{{ toYaml . | indent 8 }}
+        {{- else }}
+        # default: only pods in this namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+        {{- end }}
+
+    {{- with .Values.networkPolicy.extraIngress }}
+{{ toYaml . | indent 4 }}
+    {{- end }}
+{{- end }}
