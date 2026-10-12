@@ -40,7 +40,7 @@ the module and base-image versions. `govulncheck` is the gate.
 **OS base.** The official `zookeeper:3.9.5-jre-17` image is Ubuntu 22.04 and
 carries ~50 unpatched OS CVEs with no jammy fix. `docker/Dockerfile` keeps the
 exact ZooKeeper distribution and entrypoint from that image (via `COPY --from`)
-but re-bases them on `eclipse-temurin:17-jre-noble` (Ubuntu 24.04), then runs
+but re-bases them on `eclipse-temurin:25-jre-noble` (Ubuntu 24.04, Java 25 LTS), then runs
 `apt-get upgrade`. The upstream entrypoint's `gosu` (a Go 1.18 binary, 100+
 stale stdlib CVEs) is rewritten to use `setpriv` from util-linux. Net result:
 0 HIGH/CRITICAL, and the only residue is a handful of MEDIUM/LOW OS packages

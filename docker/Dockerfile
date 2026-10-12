@@ -29,8 +29,10 @@ RUN mvn -B -q package
 # ---- ZooKeeper distribution, re-based on a current Ubuntu JRE ----
 # The official zookeeper:3.9.5-jre-17 image is Ubuntu 22.04 (jammy) and carries
 # ~25 OS CVEs that have no jammy fix. We take the exact ZooKeeper distribution
-# and entrypoint from that image but re-base them on eclipse-temurin:17-jre-noble
+# and entrypoint from that image but re-base them on eclipse-temurin:25-jre-noble
 # (Ubuntu 24.04), which ships current libc / openssl / zlib / sqlite / etc.
+# Java 25 LTS rather than upstream's 17: Temurin support runs to 2031-09
+# (17 ends 2027-10). ZooKeeper 3.9.5 and zu.jar were smoke-tested on 25.
 # Everything ZK-version-specific still comes from upstream via COPY --from, so a
 # ZK bump stays a one-line tag change.
 #
@@ -39,7 +41,7 @@ RUN mvn -B -q package
 # already in the base) which does the same job with no Go.
 FROM ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}zookeeper:3.9.5-jre-17 AS zk-dist
 
-FROM ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}eclipse-temurin:17-jre-noble
+FROM ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}eclipse-temurin:25-jre-noble
 RUN set -eux; \
     # Ubuntu 24.04 ships a default user/group at 1000; reclaim it for zookeeper
     # so the uid/gid matches the upstream image.
