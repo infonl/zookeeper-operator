@@ -178,8 +178,10 @@ func makeZkPodSpec(z *v1beta1.ZookeeperCluster, volumes []v1.Volume) v1.PodSpec 
 		TopologySpreadConstraints: z.Spec.Pod.TopologySpreadConstraints,
 		Volumes:                   append(z.Spec.Volumes, volumes...),
 	}
-	if !reflect.DeepEqual(v1.PodSecurityContext{}, z.Spec.Pod.SecurityContext) {
-		podSpec.SecurityContext = z.Spec.Pod.SecurityContext
+	if sc := z.Spec.Pod.SecurityContext; sc != nil && !reflect.DeepEqual(v1.PodSecurityContext{}, *sc) {
+		podSpec.SecurityContext = sc
+	} else {
+		podSpec.SecurityContext = DefaultPodSecurityContext()
 	}
 	podSpec.NodeSelector = z.Spec.Pod.NodeSelector
 	podSpec.Tolerations = z.Spec.Pod.Tolerations
@@ -190,6 +192,29 @@ func makeZkPodSpec(z *v1beta1.ZookeeperCluster, volumes []v1.Volume) v1.PodSpec 
 	}
 
 	return podSpec
+}
+
+// zookeeperUID is the uid/gid of the `zookeeper` user in the ZooKeeper image
+// (docker/Dockerfile; the official zookeeper images use the same).
+const zookeeperUID int64 = 1000
+
+// DefaultPodSecurityContext is used when spec.pod.securityContext is unset or
+// empty: the pod runs entirely as the unprivileged `zookeeper` user. fsGroup
+// lets the kubelet make the data volume group-writable, which also migrates
+// volumes written by earlier root-running images; OnRootMismatch limits that
+// recursive change to mounts whose root does not match yet. Clusters that need
+// another user (or root) set spec.pod.securityContext explicitly.
+func DefaultPodSecurityContext() *v1.PodSecurityContext {
+	uid := zookeeperUID
+	nonRoot := true
+	policy := v1.FSGroupChangeOnRootMismatch
+	return &v1.PodSecurityContext{
+		RunAsNonRoot:        &nonRoot,
+		RunAsUser:           &uid,
+		RunAsGroup:          &uid,
+		FSGroup:             &uid,
+		FSGroupChangePolicy: &policy,
+	}
 }
 
 // MakeClientService returns a client service resource for the zookeeper cluster
