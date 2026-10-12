@@ -4,7 +4,7 @@ ARG DISTROLESS_DOCKER_REGISTRY
 # still receiving security patches. Pinned to a patch release so image scans are
 # deterministic; Dependabot (docker ecosystem) bumps it.
 ARG ALPINE_VERSION=3.23
-FROM ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}golang:1.26.6-alpine${ALPINE_VERSION} as go-builder
+FROM ${DOCKER_REGISTRY:+$DOCKER_REGISTRY/}golang:1.26.9-alpine${ALPINE_VERSION} as go-builder
 
 ARG PROJECT_NAME=zookeeper-operator
 ARG REPO_PATH=github.com/pravega/$PROJECT_NAME
