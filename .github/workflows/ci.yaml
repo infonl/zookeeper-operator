@@ -160,7 +160,9 @@ jobs:
     - name: Log in to ghcr.io (Docker)
       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
     - name: Pushing docker images
-      run: make push
+      # Pre-releases (the -rc test builds) are pushed under their version tag
+      # only; `latest` moves with full releases.
+      run: make push PUSH_LATEST=${{ github.event.release.prerelease && 'false' || 'true' }}
     - name: Set up Helm
       uses: azure/setup-helm@v4
       with:

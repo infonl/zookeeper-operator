@@ -278,15 +278,25 @@ test-login:
 # (`make login` locally, or the workflow's own login step in CI) - doesn't
 # call `login` itself so CI's own login isn't clobbered by a second,
 # credential-less one running here.
+#
+# `latest` is only moved when PUSH_LATEST=true (the default). CI passes
+# PUSH_LATEST=false for GitHub pre-releases, so an -rc test build never
+# becomes `latest`.
+PUSH_LATEST ?= true
 push: build-image build-zk-image
 	docker tag $(REPO):$(VERSION) $(GHCR_REPO):$(VERSION)
-	docker tag $(REPO):$(VERSION) $(GHCR_REPO):latest
 	docker tag $(APP_REPO):$(VERSION) $(GHCR_APP_REPO):$(VERSION)
-	docker tag $(APP_REPO):$(VERSION) $(GHCR_APP_REPO):latest
 	docker push $(GHCR_REPO):$(VERSION)
-	docker push $(GHCR_REPO):latest
 	docker push $(GHCR_APP_REPO):$(VERSION)
-	docker push $(GHCR_APP_REPO):latest
+	@if [ "$(PUSH_LATEST)" = "true" ]; then \
+		set -e; \
+		docker tag $(REPO):$(VERSION) $(GHCR_REPO):latest; \
+		docker tag $(APP_REPO):$(VERSION) $(GHCR_APP_REPO):latest; \
+		docker push $(GHCR_REPO):latest; \
+		docker push $(GHCR_APP_REPO):latest; \
+	else \
+		echo "PUSH_LATEST=$(PUSH_LATEST): not moving the latest tag"; \
+	fi
 
 # Packages and OCI-pushes every chart under charts/ (currently
 # zookeeper-operator and zookeeper) to ghcr.io/infonl/charts/<name>,
